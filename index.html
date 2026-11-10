@@ -57,14 +57,15 @@ ul{margin:0;padding-left:20px}
 <div class="wrap">
   <div class="row" style="justify-content:space-between;align-items:flex-end">
     <div><div class="sub">Force athlétique · commandes IPF en direct</div><h1>Arbitre <span>vocal</span></h1></div>
-    <span class="sub"><span id="fps"></span> · version 13</span>
+    <span class="sub"><span id="fps"></span> · version 14</span>
   </div>
 
   <div class="grid">
     <label>Mouvement<select id="lift"><option value="squat">Squat</option><option value="bench">Développé couché</option><option value="deadlift">Soulevé de terre</option></select></label>
     <label>Profondeur exigée<select id="depth"><option value="0">Très stricte</option><option value="0.06">Stricte</option><option value="0.12" selected>Standard</option><option value="0.18">Souple</option><option value="0.24">Très souple</option></select></label>
     <label>Pause au développé<select id="pause"><option value="0.4">Arbitre rapide (0,4 s)</option><option value="0.6" selected>Arbitre standard (0,6 s)</option><option value="0.9">Arbitre strict (0,9 s)</option><option value="1.3">Très strict (1,3 s)</option></select></label>
-    <label>Mode<select id="mode"><option value="comp">Compétition</option><option value="pause">Pause (2ct, 3ct…)</option><option value="tempo">Tempo (descente lente)</option></select></label>
+    <label>Mode<select id="mode"><option value="comp">Compétition</option><option value="pause">Pause (2ct, 3ct…)</option><option value="tempo">Tempo (descente lente)</option><option value="serie">Série (plusieurs reps)</option></select></label>
+    <label id="nrepsL" hidden>Reps visées<select id="nreps"><option value="0" selected>Libre</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="8">8</option><option value="10">10</option><option value="12">12</option></select></label>
     <label id="pcountL" hidden>Temps de pause<select id="pcount"><option value="1">1 s</option><option value="2" selected>2 s (2ct)</option><option value="3">3 s (3ct)</option><option value="4">4 s</option><option value="5">5 s</option></select></label>
     <label id="tdescL" hidden>Durée de descente<select id="tdesc"><option value="2">2 s</option><option value="3" selected>3 s</option><option value="4">4 s</option><option value="5">5 s</option></select></label>
     <label>Mesures à l'écran<select id="showDbg"><option value="0">Masquées</option><option value="1">Affichées</option></select></label>
@@ -136,7 +137,7 @@ function still(key,sec,tol,t){const h=hist.filter(x=>t-x.t<=sec&&x[key]!=null);i
 
 /* ---------- referee state ---------- */
 let R;
-function resetRep(){bv=null;R={state:"setup",t0:performance.now(),log:[],faults:[],notes:[],depth:false,ref:{},done:false};hist.length=0;$("result").hidden=true;$("log").textContent="Aucune pour l'instant.";$("depthPill").hidden=true}
+function resetRep(){bv=null;R={reps:[],state:"setup",t0:performance.now(),log:[],faults:[],notes:[],depth:false,ref:{},done:false};hist.length=0;$("result").hidden=true;$("log").textContent="Aucune pour l'instant.";$("depthPill").hidden=true}
 resetRep();
 function setState(txt,cls){const s=$("state");s.textContent=txt;s.className="pill"+(cls?" "+cls:"")}
 function finish(){
@@ -151,10 +152,57 @@ function finish(){
   $("result").hidden=false;setState(ok?"Bon essai":"Essai refusé",ok?"good":"bad");
   setTimeout(()=>{if(R.done)resetRep()},6000);
 }
+function repSay(ok,n){if(ok)countSay(n);else{beep(220,0.25);try{if(speechSynthesis.speaking)speechSynthesis.cancel();const u=new SpeechSynthesisUtterance("non");u.lang="fr-FR";if(frVoice)u.voice=frVoice;speechSynthesis.speak(u)}catch(e){}const c=$("cmd");c.textContent="✗";c.classList.add("on");clearTimeout(cmdTimer);cmdTimer=setTimeout(()=>c.classList.remove("on"),700)}}
+function addRep(ok,why){R.reps.push({ok,why});const n=R.reps.filter(x=>x.ok).length;repSay(ok,ok?n:0)}
+function finishSeries(){
+  R.done=true;R.state="done";const tot=R.reps.length,okN=R.reps.filter(x=>x.ok).length,tg=parseInt($("nreps").value,10);
+  const good=tot>0&&okN===tot&&(!tg||okN>=tg);
+  $("result").innerHTML=`<div class="lights">${R.reps.map(r=>`<span class="light ${r.ok?"w":"r"}" style="width:30px;height:30px" role="img" aria-label="${r.ok?"Rep valide":"Rep non valide"}"></span>`).join("")}</div>
+  <b class="${good?"good":"bad"}">${okN} rep${okN>1?"s":""} valide${okN>1?"s":""} sur ${tot}${tg?` · objectif ${tg}`:""}</b>
+  <ul>${R.reps.map((r,i)=>`<li>Rep ${i+1} : ${r.ok?"valide":r.why}</li>`).join("")}</ul>
+  <div class="sub">Appuie sur « Nouvel essai » pour la série suivante.</div>`;
+  $("result").hidden=false;setState(`${okN}/${tot} reps valides`,good?"good":"bad");
+}
+function seriesStep(lm,t,o){
+  const {sh,wr,hip,kn,an,thigh,arm,kneeA,hipA}=o,lift=$("lift").value,tg=parseInt($("nreps").value,10),S=R.ref;
+  const nOk=()=>R.reps.filter(x=>x.ok).length,label=()=>`Série : ${R.reps.length} rep${R.reps.length>1?"s":""} · ${nOk()} valide${nOk()>1?"s":""}${tg?" / "+tg:""}`;
+  const endCheck=(calmTop)=>{if(R.reps.length&&calmTop&&((tg&&nOk()>=tg)||(!tg&&t-(S.lastRep||t)>2.5))){say("Rack");finishSeries();return true}return false};
+  if(lift==="squat"){
+    thMax=Math.max(thMax*0.99995,thigh);pushHist(t,{hy:hip.y,hs:hip.y/thMax});
+    const deep=hip.y>=kn.y-parseFloat($("depth").value)*thigh;meas=`hanche ${((kn.y-hip.y)/thigh*100).toFixed(0)} % au-dessus du genou`;
+    if(kneeA>160)S.stand=S.stand==null?hip.y:Math.min(S.stand+0.002,Math.max(S.stand-0.01,hip.y));
+    if(S.st==null){setState("Série : debout, prêt");if(S.stand!=null&&kneeA>160&&calm("hs",0.8,t)){S.st="top";say("Squat")}return}
+    if(S.st==="top"){setState(label());if(endCheck(kneeA>160&&calm("hs",0.5,t)))return;if(hip.y>S.stand+0.25*thigh){S.st="down";S.deep=false;S.max=hip.y}}
+    else if(S.st==="down"){if(deep)S.deep=true;S.max=Math.max(S.max,hip.y);if(hip.y<S.max-0.08*thigh){S.st="up";S.min=hip.y}}
+    else if(S.st==="up"){if(hip.y>S.min+0.06*thigh)S.bounce=true;S.min=Math.min(S.min,hip.y);
+      if(kneeA>160&&hip.y<S.stand+0.08*thigh){addRep(S.deep&&!S.bounce,!S.deep?"profondeur insuffisante":"mouvement vers le bas pendant la remontée");S.bounce=false;S.lastRep=t;S.st="top"}
+      else if(hip.y>S.min+0.15*thigh&&!S.deep){S.st="down"}}
+    const dp=$("depthPill");dp.hidden=false;dp.textContent=deep||S.deep?"Profondeur ✓":"Profondeur ✗";dp.className="pill "+(deep||S.deep?"good":"bad");
+  }else if(lift==="bench"){
+    armMax=Math.max(armMax*0.998,arm);const vis=i=>(lm[i].visibility??1)>0.5;
+    let raw=(sh.y-wr.y)/armMax;if(vis(11)&&vis(12)&&vis(15)&&vis(16))raw=((lm[11].y-lm[15].y)+(lm[12].y-lm[16].y))/2/armMax;
+    bv=bv==null?raw:bv+(raw-bv)*0.45;const v=bv;pushHist(t,{v});meas=`barre ${(v*100).toFixed(0)} %`;
+    if(S.st==null){setState("Série : bras tendus, prêt");if(v>0.7&&calm("v",0.8,t)){S.st="top";S.top=v;say("Start")}return}
+    S.top=Math.max(S.top*0.9995,S.st==="top"?v:S.top);
+    if(S.st==="top"){setState(label());if(endCheck(calm("v",0.5,t)&&v>S.top-0.08))return;if(v<S.top-0.15){S.st="down";S.bot=v}}
+    else if(S.st==="down"){S.bot=Math.min(S.bot,v);if(v>S.bot+0.1){S.st="up";S.chest=S.bot<S.top-0.5;S.max=v}}
+    else if(S.st==="up"){S.max=Math.max(S.max,v);
+      if(v>S.top-0.08){addRep(S.chest,"barre pas descendue jusqu'à la poitrine");S.lastRep=t;S.st="top"}
+      else if(v<S.max-0.1){addRep(false,"verrouillage incomplet");S.lastRep=t;S.st="down";S.bot=v}}
+  }else{
+    const L=Math.max(0.04,dist(hip,kn)+dist(kn,an));const h=(an.y-wr.y)/L;pushHist(t,{h});meas=`hauteur ${h.toFixed(2)} · genou ${kneeA.toFixed(0)}° · hanche ${hipA.toFixed(0)}°`;
+    if(S.st==null){setState("Série : en position, barre au sol");if(calm("h",0.6,t)&&kneeA<165){S.st="floor";S.floor=h}return}
+    if(S.st==="floor"){setState(label());S.floor=Math.min(S.floor+0.001,h);if(R.reps.length&&calm("h",0.5,t)&&((tg&&nOk()>=tg)||(!tg&&t-(S.lastRep||t)>3))){finishSeries();return}if(h>S.floor+0.12){S.st="pull";S.max=h;S.locked=false;S.dip=false}}
+    else if(S.st==="pull"){if(h>S.max)S.max=h;if(!S.locked&&h<S.max-0.06&&S.max>S.floor+0.2)S.dip=true;
+      if(kneeA>158&&hipA>160&&h>S.floor+0.3){if(!S.locked){S.locked=true;addRep(!S.dip,"mouvement vers le bas pendant la montée");S.lastRep=t}}
+      if(h<S.floor+0.06){if(!S.locked){addRep(false,"verrouillage non atteint");S.lastRep=t}S.st="floor";if(tg&&nOk()>=tg){say("Down");finishSeries()}}}
+  }
+}
 function step(lm,t){
   const s=side(lm),g=k=>lm[P[k][s]];const sh=g("sh"),el=g("el"),wr=g("wr"),hip=g("hip"),kn=g("kn"),an=g("an");
   const thigh=Math.max(0.02,dist(hip,kn)),arm=Math.max(0.02,dist(sh,el)+dist(el,wr));
   const kneeA=ang(hip,kn,an),hipA=ang(sh,hip,kn),elbA=ang(sh,el,wr);
+  if(MODE()==="serie"&&!R.done){seriesStep(lm,t,{sh,wr,hip,kn,an,thigh,arm,kneeA,hipA});return {s,kneeA,hipA,elbA}}
   const lift=$("lift").value;if(lift==="squat"){thMax=Math.max(thMax*0.99995,thigh);pushHist(t,{hy:hip.y,wy:wr.y,hs:hip.y/thMax})}meas=lift==="squat"?`genou ${kneeA.toFixed(0)}°`:meas;if(R.done)return {s,kneeA,hipA,elbA};
   if(lift==="squat"){
     const tol=parseFloat($("depth").value)*thigh;const deep=hip.y>=kn.y-tol;meas=`genou ${kneeA.toFixed(0)}° · hanche ${((kn.y-hip.y)/thigh*100).toFixed(0)} % au-dessus du genou`;
@@ -298,7 +346,7 @@ $("file").addEventListener("change",()=>{const f=$("file").files[0];if(f)startFi
 $("stop").onclick=()=>{stopAll();setState("Arrêté")};
 $("reset").onclick=()=>{unlockAudio();resetRep();sm=null};
 $("lift").addEventListener("change",()=>{resetRep();$("depthPill").hidden=true});
-function modeUI(){const m=MODE();$("pcountL").hidden=m!=="pause";$("tdescL").hidden=m!=="tempo";resetRep()}
+function modeUI(){const m=MODE();$("pcountL").hidden=m!=="pause";$("tdescL").hidden=m!=="tempo";$("nrepsL").hidden=m!=="serie";resetRep()}
 $("mode").addEventListener("change",modeUI);
 $("model").addEventListener("change",()=>{if(running){const s=!!stream;if(s)startCam()}});
 document.addEventListener("visibilitychange",async()=>{if(!document.hidden&&running&&!wake){try{if(navigator.wakeLock)wake=await navigator.wakeLock.request("screen")}catch(e){}}});
