@@ -21,8 +21,9 @@ h1{font-family:var(--display);font-weight:700;font-size:1.9rem;margin:0;text-tra
 h1 span{color:var(--accent)}
 .sub{color:var(--mute);font-size:.88rem;line-height:1.4}
 .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
 @media (max-width:600px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.grid label[hidden]{display:none!important}
 label{display:flex;flex-direction:column;gap:4px;font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);min-width:0}
 select,button{font:inherit;font-size:1rem;border-radius:8px}
 select{background:var(--panel);color:var(--ink);border:1px solid var(--line);padding:8px 10px;width:100%}
@@ -56,13 +57,16 @@ ul{margin:0;padding-left:20px}
 <div class="wrap">
   <div class="row" style="justify-content:space-between;align-items:flex-end">
     <div><div class="sub">Force athlétique · commandes IPF en direct</div><h1>Arbitre <span>vocal</span></h1></div>
-    <span class="sub"><span id="fps"></span> · version 12</span>
+    <span class="sub"><span id="fps"></span> · version 13</span>
   </div>
 
   <div class="grid">
     <label>Mouvement<select id="lift"><option value="squat">Squat</option><option value="bench">Développé couché</option><option value="deadlift">Soulevé de terre</option></select></label>
     <label>Profondeur exigée<select id="depth"><option value="0">Très stricte</option><option value="0.06">Stricte</option><option value="0.12" selected>Standard</option><option value="0.18">Souple</option><option value="0.24">Très souple</option></select></label>
     <label>Pause au développé<select id="pause"><option value="0.4">Arbitre rapide (0,4 s)</option><option value="0.6" selected>Arbitre standard (0,6 s)</option><option value="0.9">Arbitre strict (0,9 s)</option><option value="1.3">Très strict (1,3 s)</option></select></label>
+    <label>Mode<select id="mode"><option value="comp">Compétition</option><option value="pause">Pause (2ct, 3ct…)</option><option value="tempo">Tempo (descente lente)</option></select></label>
+    <label id="pcountL" hidden>Temps de pause<select id="pcount"><option value="1">1 s</option><option value="2" selected>2 s (2ct)</option><option value="3">3 s (3ct)</option><option value="4">4 s</option><option value="5">5 s</option></select></label>
+    <label id="tdescL" hidden>Durée de descente<select id="tdesc"><option value="2">2 s</option><option value="3" selected>3 s</option><option value="4">4 s</option><option value="5">5 s</option></select></label>
     <label>Mesures à l'écran<select id="showDbg"><option value="0">Masquées</option><option value="1">Affichées</option></select></label>
     <label>Précision<select id="model"><option value="lite">Rapide</option><option value="full" selected>Précise</option></select></label>
   </div>
@@ -100,10 +104,17 @@ const vid=$("vid"),cv=$("cv"),ctx=cv.getContext("2d");
 /* ---------- audio ---------- */
 function unlockAudio(){try{if(!audio){const AC=window.AudioContext||window.webkitAudioContext;if(AC)audio=new AC()}audio&&audio.resume&&audio.resume()}catch(e){}
   try{const u=new SpeechSynthesisUtterance(" ");u.volume=0;speechSynthesis.speak(u)}catch(e){}}
-let enVoice=null;function pickVoice(){try{const vs=speechSynthesis.getVoices();enVoice=vs.find(v=>/en-(US|GB)/i.test(v.lang))||null}catch(e){}}
+let enVoice=null,frVoice=null;function pickVoice(){try{const vs=speechSynthesis.getVoices();enVoice=vs.find(v=>/en-(US|GB)/i.test(v.lang))||null;frVoice=vs.find(v=>/^fr/i.test(v.lang))||null}catch(e){}}
 try{pickVoice();speechSynthesis.onvoiceschanged=pickVoice}catch(e){}
 function beep(f=1000,d=0.12){try{if(!audio)return;const o=audio.createOscillator(),g=audio.createGain();o.frequency.value=f;g.gain.value=0.25;o.connect(g);g.connect(audio.destination);o.start();o.stop(audio.currentTime+d)}catch(e){}}
 let cmdTimer=0;
+const NUMS=["un","deux","trois","quatre","cinq","six"];
+function countSay(k){beep(660,0.06);try{if(speechSynthesis.speaking)speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(NUMS[k-1]||String(k));u.lang="fr-FR";if(frVoice)u.voice=frVoice;u.rate=1.2;speechSynthesis.speak(u)}catch(e){}
+  const c=$("cmd");c.textContent=String(k);c.classList.add("on");clearTimeout(cmdTimer);cmdTimer=setTimeout(()=>c.classList.remove("on"),700)}
+const MODE=()=>$("mode").value,NP=()=>parseInt($("pcount").value,10),TD=()=>parseFloat($("tdesc").value);
+function tick(t0,t,limit){if(t0==null)return;const k=Math.floor(t-t0);if(k>=1&&k<=limit&&k>(R.ref.cnt||0)){R.ref.cnt=k;countSay(k)}}
+function tempoCheck(d0,d1){if(MODE()!=="tempo"||d0==null||d1==null)return;const d=d1-d0,tg=TD();if(d<tg-0.5)R.faults.push(`Descente trop rapide : ${fr1(d)} s au lieu de ${tg} s.`);else R.notes.push(`Descente en ${fr1(d)} s (objectif ${tg} s).`)}
+const fr1=x=>x.toFixed(1).replace(".",",");
 function say(word){
   beep();try{if(speechSynthesis.speaking)speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(word);u.lang="en-US";if(enVoice)u.voice=enVoice;u.rate=1.15;u.pitch=0.9;u.volume=1;speechSynthesis.speak(u)}catch(e){}
   const c=$("cmd");c.textContent=word.toUpperCase();c.classList.add("on");clearTimeout(cmdTimer);cmdTimer=setTimeout(()=>c.classList.remove("on"),1200);
@@ -117,11 +128,11 @@ function ang(a,b,c){const v1=[a.x-b.x,a.y-b.y],v2=[c.x-b.x,c.y-b.y];const d=Math
 const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 let sm=null;
 function smooth(lm){if(!sm){sm=lm.map(p=>({...p}));return sm}const k=0.7;sm=lm.map((p,i)=>({x:sm[i].x+(p.x-sm[i].x)*k,y:sm[i].y+(p.y-sm[i].y)*k,z:p.z,visibility:p.visibility}));return sm}
-const hist=[];let meas="",armMax=0,bv=null;
+const hist=[];let meas="",armMax=0,bv=null,thMax=0;
 function pushHist(t,o){hist.push({t,...o});while(hist.length&&t-hist[0].t>3)hist.shift()}
-function moved(key,sec,amp,t){const h=hist.filter(x=>t-x.t<=sec);if(h.length<4)return false;const ys=h.map(x=>x[key]);return Math.max(...ys)-Math.min(...ys)>amp}
+function moved(key,sec,amp,t){const h=hist.filter(x=>t-x.t<=sec&&x[key]!=null);if(h.length<4)return false;const ys=h.map(x=>x[key]);return Math.max(...ys)-Math.min(...ys)>amp}
 function calm(key,sec,t){const h=hist.filter(x=>t-x.t<=sec&&x[key]!=null);if(h.length<5||t-h[0].t<sec*0.8)return false;const n=h.length,mt=h.reduce((a,x)=>a+x.t,0)/n,mv=h.reduce((a,x)=>a+x[key],0)/n;let sxy=0,sxx=0,sr=0;h.forEach(x=>{sxy+=(x.t-mt)*(x[key]-mv);sxx+=(x.t-mt)**2});const b=sxx?sxy/sxx:0;h.forEach(x=>{const r=x[key]-(mv+b*(x.t-mt));sr+=r*r});return Math.abs(b)<0.1&&Math.sqrt(sr/n)<0.03}
-function still(key,sec,tol,t){const h=hist.filter(x=>t-x.t<=sec);if(h.length<4||t-h[0].t<sec*0.8)return false;const ys=h.map(x=>x[key]);return Math.max(...ys)-Math.min(...ys)<tol}
+function still(key,sec,tol,t){const h=hist.filter(x=>t-x.t<=sec&&x[key]!=null);if(h.length<4||t-h[0].t<sec*0.8)return false;const ys=h.map(x=>x[key]);return Math.max(...ys)-Math.min(...ys)<tol}
 
 /* ---------- referee state ---------- */
 let R;
@@ -144,15 +155,21 @@ function step(lm,t){
   const s=side(lm),g=k=>lm[P[k][s]];const sh=g("sh"),el=g("el"),wr=g("wr"),hip=g("hip"),kn=g("kn"),an=g("an");
   const thigh=Math.max(0.02,dist(hip,kn)),arm=Math.max(0.02,dist(sh,el)+dist(el,wr));
   const kneeA=ang(hip,kn,an),hipA=ang(sh,hip,kn),elbA=ang(sh,el,wr);
-  const lift=$("lift").value;if(lift==="squat")pushHist(t,{hy:hip.y,wy:wr.y});meas=lift==="squat"?`genou ${kneeA.toFixed(0)}°`:meas;if(R.done)return {s,kneeA,hipA,elbA};
+  const lift=$("lift").value;if(lift==="squat"){thMax=Math.max(thMax*0.99995,thigh);pushHist(t,{hy:hip.y,wy:wr.y,hs:hip.y/thMax})}meas=lift==="squat"?`genou ${kneeA.toFixed(0)}°`:meas;if(R.done)return {s,kneeA,hipA,elbA};
   if(lift==="squat"){
     const tol=parseFloat($("depth").value)*thigh;const deep=hip.y>=kn.y-tol;meas=`genou ${kneeA.toFixed(0)}° · hanche ${((kn.y-hip.y)/thigh*100).toFixed(0)} % au-dessus du genou`;
     const dp=$("depthPill");if(R.state!=="setup"){dp.hidden=false;dp.textContent=deep||R.depth?"Profondeur ✓":"Profondeur ✗";dp.className="pill "+(deep||R.depth?"good":"bad")}
     if(R.state==="setup"){if(!stream)R.ref.moved=true;if(!R.ref.moved&&moved("hy",2.5,0.12*thigh,t))R.ref.moved=true;setState(R.ref.moved?"En attente : debout, immobile":"Sors la barre du rack");if(kneeA>160)R.ref.stand=R.ref.stand==null?hip.y:Math.min(R.ref.stand+0.002,Math.max(R.ref.stand-0.01,hip.y));
       if(R.ref.moved&&kneeA>160&&still("hy",1.0,0.04*thigh,t)){say("Squat");R.state="ready";R.ref.start=hip.y}
-      else if(!stream&&R.ref.stand!=null&&kneeA<135&&hip.y>R.ref.stand+0.35*thigh){R.notes.push("Vidéo déjà tournée : descente commencée avant la commande « Squat », non pénalisé.");R.state="down";R.ref.max=hip.y;R.ref.start=R.ref.stand}}
-    else if(R.state==="ready"){setState("Commande donnée, descends");if(hip.y>R.ref.start+0.25*thigh){R.state="down";R.ref.max=hip.y}}
-    else if(R.state==="down"){setState("Descente");if(deep)R.depth=true;R.ref.max=Math.max(R.ref.max,hip.y);if(hip.y<R.ref.max-0.08*thigh){R.state="up";R.ref.min=hip.y}}
+      else if(!stream&&R.ref.stand!=null&&kneeA<135&&hip.y>R.ref.stand+0.35*thigh){R.notes.push("Vidéo déjà tournée : descente commencée avant la commande « Squat », non pénalisé.");R.state="down";R.ref.max=hip.y;R.ref.start=R.ref.stand;R.ref.tmax=t}}
+    else if(R.state==="ready"){setState("Commande donnée, descends");if(R.ref.d0==null&&hip.y>R.ref.start+0.05*thigh)R.ref.d0=t;if(hip.y>R.ref.start+0.25*thigh){R.state="down";R.ref.max=hip.y;R.ref.tmax=t;R.ref.cnt=0}}
+    else if(R.state==="down"){setState(MODE()==="tempo"?"Descente contrôlée":"Descente");if(deep)R.depth=true;if(hip.y>R.ref.max){R.ref.max=hip.y;R.ref.tmax=t}
+      if(MODE()==="tempo")tick(R.ref.d0,t,TD());
+      if(MODE()==="pause"&&(deep||R.depth)&&calm("hs",0.3,t)){R.state="pause";R.ref.ps=t;R.ref.py=hip.y;R.ref.cnt=0;tempoCheck(R.ref.d0,R.ref.tmax)}
+      else if(hip.y<R.ref.max-0.08*thigh){if(MODE()==="pause")R.faults.push("Pas de pause en bas : remontée sans arrêt.");else tempoCheck(R.ref.d0,R.ref.tmax);R.state="up";R.ref.min=hip.y}}
+    else if(R.state==="pause"){const el=t-R.ref.ps;setState(`Pause : ${fr1(el)} s / ${NP()} s`);tick(R.ref.ps,t,NP());
+      if(el>=NP()){say("Up");R.state="up";R.ref.min=hip.y}
+      else if(hip.y<R.ref.py-0.15*thigh){R.faults.push(`Remontée avant la fin de la pause : ${fr1(el)} s sur ${NP()} s.`);R.state="up";R.ref.min=hip.y}}
     else if(R.state==="up"){setState("Remontée");if(hip.y>R.ref.min+0.06*thigh&&!R.ref.bounce){R.ref.bounce=true;R.faults.push("Mouvement vers le bas pendant la remontée.")}R.ref.min=Math.min(R.ref.min,hip.y);
       if(kneeA>160&&still("hy",0.5,0.04*thigh,t)){say("Rack");finish()}}
   }else if(lift==="bench"){
@@ -165,10 +182,16 @@ function step(lm,t){
     if(R.state==="setup"){setState("En attente : bras tendus, barre immobile");if(v>0.7)R.ref.top0=Math.max(R.ref.top0||0,v);
       if(v>0.7&&calm("v",0.8,t)){say("Start");R.state="ready";R.ref.top=v}
       else if(!stream&&R.ref.top0&&v<R.ref.top0-0.15){R.notes.push("Vidéo déjà tournée : descente commencée avant la commande « Start », non pénalisé.");R.state="down";R.ref.top=R.ref.top0;R.ref.bot=v}}
-    else if(R.state==="ready"){setState("Commande donnée, descends la barre");R.ref.top=Math.max(R.ref.top,v);if(v<R.ref.top-0.15){R.state="down";R.ref.bot=v}}
-    else if(R.state==="down"){setState("Descente : barre immobile sur la poitrine");R.ref.bot=Math.min(R.ref.bot,v);
-      if(v<R.ref.top-0.35&&v<R.ref.bot+0.06&&calm("v",pause,t)){say("Press");R.state="press";R.ref.press=v;R.ref.max=v}
-      else if(v>R.ref.bot+0.12){if(stream)R.faults.push("Poussée avant la commande « Press » : la barre n'est pas restée immobile assez longtemps sur la poitrine.");else R.notes.push("Vidéo déjà tournée : poussée avant la commande « Press », non pénalisée. En compétition, attends la commande.");R.state="press";R.ref.press=R.ref.bot;R.ref.max=v}}
+    else if(R.state==="ready"){setState("Commande donnée, descends la barre");R.ref.top=Math.max(R.ref.top,v);if(R.ref.d0==null&&v<R.ref.top-0.05)R.ref.d0=t;if(v<R.ref.top-0.15){R.state="down";R.ref.bot=v;R.ref.tbot=t;R.ref.cnt=0}}
+    else if(R.state==="down"){setState(MODE()==="tempo"?"Descente contrôlée":"Descente : barre immobile sur la poitrine");if(v<R.ref.bot){R.ref.bot=v;R.ref.tbot=t}
+      if(MODE()==="tempo")tick(R.ref.d0,t,TD());
+      if(MODE()==="pause"&&v<R.ref.top-0.35&&v<R.ref.bot+0.06&&calm("v",0.3,t)){R.state="bpause";R.ref.ps=t;R.ref.pv=v;R.ref.cnt=0}
+      else if(MODE()!=="pause"&&v<R.ref.top-0.35&&v<R.ref.bot+0.06&&calm("v",pause,t)){tempoCheck(R.ref.d0,R.ref.tbot);say("Press");R.state="press";R.ref.press=v;R.ref.max=v}
+      else if(v>R.ref.bot+0.12&&MODE()==="pause"){R.faults.push("Pas de pause sur la poitrine : poussée sans arrêt.");R.state="press";R.ref.press=R.ref.bot;R.ref.max=v}
+      else if(v>R.ref.bot+0.12){tempoCheck(R.ref.d0,R.ref.tbot);if(stream)R.faults.push("Poussée avant la commande « Press » : la barre n'est pas restée immobile assez longtemps sur la poitrine.");else R.notes.push("Vidéo déjà tournée : poussée avant la commande « Press », non pénalisée. En compétition, attends la commande.");R.state="press";R.ref.press=R.ref.bot;R.ref.max=v}}
+    else if(R.state==="bpause"){const el=t-R.ref.ps;setState(`Pause : ${fr1(el)} s / ${NP()} s`);tick(R.ref.ps,t,NP());
+      if(el>=NP()){say("Press");R.state="press";R.ref.press=v;R.ref.max=v}
+      else if(v>R.ref.pv+0.08){R.faults.push(`Pause trop courte : poussée à ${fr1(el)} s sur ${NP()} s.`);R.state="press";R.ref.press=R.ref.pv;R.ref.max=v}}
     else if(R.state==="press"){setState("Poussée");
       if(v<R.ref.press-0.08&&!R.ref.sink){R.ref.sink=true;R.faults.push("La barre s'enfonce ou rebondit après la commande « Press ».")}
       if(R.ref.max>R.ref.press+0.12&&v<R.ref.max-0.07&&!R.ref.down){R.ref.down=true;R.faults.push("Mouvement vers le bas pendant la poussée.")}
@@ -179,12 +202,19 @@ function step(lm,t){
     pushHist(t,{hy:hip.y,wy:wr.y,h});meas=`hauteur ${h.toFixed(2)} · genou ${kneeA.toFixed(0)}° · hanche ${hipA.toFixed(0)}°`;
     const rec=hist.filter(x=>t-x.t<=2&&x.h!=null).map(x=>x.h);const lo=rec.length?Math.min(...rec):h;
     if(R.state==="setup"){setState("En attente : en position, barre au sol");if(h>lo+0.12&&kneeA<165){R.state="pull";R.ref.max=h;R.ref.start=lo}}
+    else if(R.state==="dpause"){const el=t-R.ref.ps;setState(`Pause : ${fr1(el)} s / ${NP()} s`);tick(R.ref.ps,t,NP());
+      if(el>=NP()){say("Up");R.ref.paused=true;R.state="pull"}
+      else if(h>R.ref.ph+0.06){R.faults.push(`Pause trop courte : reprise à ${fr1(el)} s sur ${NP()} s.`);R.ref.paused=true;R.state="pull"}
+      else if(h<R.ref.ph-0.1){R.faults.push("Barre reposée pendant la pause.");finish()}}
+    else if(R.state==="lower"){setState("Descente contrôlée");if(R.ref.d0==null&&h<R.ref.max-0.03){R.ref.d0=t;R.ref.cnt=0}tick(R.ref.d0,t,TD());
+      if(h<R.ref.start+0.04){tempoCheck(R.ref.d0,t);finish()}}
     else if(R.state==="pull"){setState("Tirage");
+      if(MODE()==="pause"&&!R.ref.paused&&!R.ref.top&&h>R.ref.start+0.06&&h<R.ref.start+0.45&&calm("h",0.3,t)){R.state="dpause";R.ref.ps=t;R.ref.ph=h;R.ref.cnt=0}
       R.ref.max=Math.max(R.ref.max,h);const locked=kneeA>158&&hipA>160&&h>=R.ref.max-0.04&&h>R.ref.start+0.3;if(locked)R.ref.top=true;
       if(R.ref.top&&h<R.ref.max-0.1){R.faults.push("Barre redescendue avant la commande « Down ».");finish()}
       else if(!R.ref.top&&h<R.ref.max-0.06&&R.ref.max>R.ref.start+0.2&&!R.ref.down){R.ref.down=true;R.faults.push("Mouvement vers le bas pendant la montée.")}
       else if(!R.ref.top&&h<R.ref.start+0.05&&R.ref.max<R.ref.start+0.25){R.state="setup"}
-      else if(locked&&h>=R.ref.max-0.015&&still("h",0.3,0.03,t)){say("Down");finish()}}
+      else if(locked&&h>=R.ref.max-0.015&&still("h",0.3,0.03,t)){if(MODE()==="pause"&&!R.ref.paused)R.faults.push("Pas de pause pendant la montée.");say("Down");if(MODE()==="tempo"){R.state="lower"}else finish()}}
   }
   return {s,kneeA,hipA,elbA};
 }
@@ -268,6 +298,8 @@ $("file").addEventListener("change",()=>{const f=$("file").files[0];if(f)startFi
 $("stop").onclick=()=>{stopAll();setState("Arrêté")};
 $("reset").onclick=()=>{unlockAudio();resetRep();sm=null};
 $("lift").addEventListener("change",()=>{resetRep();$("depthPill").hidden=true});
+function modeUI(){const m=MODE();$("pcountL").hidden=m!=="pause";$("tdescL").hidden=m!=="tempo";resetRep()}
+$("mode").addEventListener("change",modeUI);
 $("model").addEventListener("change",()=>{if(running){const s=!!stream;if(s)startCam()}});
 document.addEventListener("visibilitychange",async()=>{if(!document.hidden&&running&&!wake){try{if(navigator.wakeLock)wake=await navigator.wakeLock.request("screen")}catch(e){}}});
 setState("Prêt");
