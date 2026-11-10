@@ -227,15 +227,28 @@ async function startCam(){
     running=true;$("stop").hidden=false;$("cam").disabled=true;loop();
   }catch(e){setState("Caméra ou modèle indisponible","bad");$("hint").textContent="Impossible de démarrer : autorise l'accès à la caméra dans Safari (aA › Réglages du site web › Caméra) et vérifie ta connexion pour le premier chargement du modèle."}
 }
-let fileUrl=null;
+let fileUrl=null;const defHint=$("hint").textContent;
+function waitPlayable(){return new Promise((res,rej)=>{if(vid.readyState>=1)return res();const ok=()=>{clean();res()},ko=()=>{clean();rej(vid.error||new Error("media"))};const to=setTimeout(()=>{clean();rej(new Error("timeout"))},15000);function clean(){clearTimeout(to);vid.removeEventListener("loadedmetadata",ok);vid.removeEventListener("error",ko)}vid.addEventListener("loadedmetadata",ok);vid.addEventListener("error",ko)})}
+function modelFail(e){setState("Modèle de détection indisponible","bad");$("hint").textContent="Le modèle de détection n'a pas pu se charger. Vérifie ta connexion internet, puis recharge la page. Détail : "+String((e&&e.message)||e).slice(0,140)}
+function videoFail(e,f){
+  const code=vid.error&&vid.error.code;const name=(e&&e.name)||"";const type=f?(f.type||f.name.split(".").pop()):"";
+  setState("Lecture impossible","bad");
+  let msg;
+  if(code===4||name==="NotSupportedError"||/quicktime|mov|hevc/i.test(type))msg="Ce navigateur ne sait pas lire ce format vidéo"+(type?" ("+type+")":"")+". Les vidéos de l'iPhone sont souvent en HEVC : ouvre cette page dans Safari sur l'iPhone, ou règle l'appareil photo sur Réglages › Appareil photo › Formats › « Le plus compatible ».";
+  else if(name==="NotAllowedError")msg="Le navigateur a bloqué la lecture. Touche « Rejouer la vidéo » pour la lancer.";
+  else if((e&&e.message)==="timeout")msg="La vidéo met trop de temps à se charger. Essaie une vidéo plus courte (moins d'une minute).";
+  else msg="La vidéo n'a pas pu être lue. Détail : "+String((e&&e.message)||name||code||e).slice(0,140);
+  $("hint").textContent=msg;if(fileUrl)$("replay").hidden=false;
+}
 async function startFile(f){
   unlockAudio();stopAll();resetRep();sm=null;
-  try{await loadPose();vid.srcObject=null;if(fileUrl)URL.revokeObjectURL(fileUrl);fileUrl=URL.createObjectURL(f);vid.src=fileUrl;vid.loop=false;await vid.play();running=true;$("stop").hidden=false;$("replay").hidden=false;loop()}
-  catch(e){setState("Lecture impossible","bad")}
+  try{await loadPose()}catch(e){modelFail(e);return}
+  try{vid.srcObject=null;if(fileUrl)URL.revokeObjectURL(fileUrl);fileUrl=URL.createObjectURL(f);vid.src=fileUrl;vid.loop=false;await waitPlayable();await vid.play();running=true;$("stop").hidden=false;$("replay").hidden=false;$("hint").textContent=defHint;loop()}
+  catch(e){videoFail(e,f)}
 }
 async function replay(){
   if(!fileUrl)return;unlockAudio();stopAll();resetRep();sm=null;lastT=-1;
-  try{vid.srcObject=null;if(vid.src!==fileUrl)vid.src=fileUrl;vid.currentTime=0;await vid.play();running=true;$("stop").hidden=false;loop()}catch(e){setState("Lecture impossible","bad")}
+  try{vid.srcObject=null;if(vid.src!==fileUrl)vid.src=fileUrl;vid.currentTime=0;await vid.play();running=true;$("stop").hidden=false;loop()}catch(e){videoFail(e,null)}
 }
 $("replay").onclick=replay;
 vid.addEventListener("ended",()=>{if(!stream){running=false;setState(R.done?$("state").textContent:"Vidéo terminée · « Rejouer la vidéo » pour revoir")}});
