@@ -60,7 +60,7 @@ ul{margin:0;padding-left:20px}
 
   <div class="grid">
     <label>Mouvement<select id="lift"><option value="squat">Squat</option><option value="bench">Développé couché</option><option value="deadlift">Soulevé de terre</option></select></label>
-    <label>Profondeur exigée<select id="depth"><option value="0">Stricte</option><option value="0.05" selected>Standard</option><option value="0.1">Souple</option></select></label>
+    <label>Profondeur exigée<select id="depth"><option value="0">Très stricte</option><option value="0.06">Stricte</option><option value="0.12" selected>Standard</option><option value="0.18">Souple</option><option value="0.24">Très souple</option></select></label>
     <label>Pause au développé<select id="pause"><option value="0.4">Courte (0,4 s)</option><option value="0.7" selected>Normale (0,7 s)</option><option value="1.2">Longue (1,2 s)</option></select></label>
     <label>Mesures à l'écran<select id="showDbg"><option value="0">Masquées</option><option value="1">Affichées</option></select></label>
     <label>Précision<select id="model"><option value="lite">Rapide</option><option value="full" selected>Précise</option></select></label>
@@ -73,6 +73,7 @@ ul{margin:0;padding-left:20px}
     <button class="ghost" id="reset">Nouvel essai</button>
     <button class="ghost" id="stop" hidden>Arrêter</button>
   </div>
+  <div class="sub">Profondeur : les points suivent le centre des articulations, pas le pli de la hanche ni le haut du genou. Le réglage « Standard » compense cet écart ; ajuste-le si la ligne te paraît trop basse ou trop haute.</div>
   <div class="sub" id="hint">Pose le téléphone de profil, à hauteur de hanche, à 3 ou 4 m. Tout ton corps doit rester dans le cadre. Le son doit être activé.</div>
 
   <div class="stage" id="stage" hidden>
@@ -142,7 +143,7 @@ function step(lm,t){
   const kneeA=ang(hip,kn,an),hipA=ang(sh,hip,kn),elbA=ang(sh,el,wr);
   const lift=$("lift").value;if(lift==="squat")pushHist(t,{hy:hip.y,wy:wr.y});dbg=lift==="squat"?`genou ${kneeA.toFixed(0)}°`:dbg;if(R.done)return {s,kneeA,hipA,elbA};
   if(lift==="squat"){
-    const tol=parseFloat($("depth").value)*thigh;const deep=hip.y>=kn.y-tol;
+    const tol=parseFloat($("depth").value)*thigh;const deep=hip.y>=kn.y-tol;dbg=`genou ${kneeA.toFixed(0)}° · hanche ${((kn.y-hip.y)/thigh*100).toFixed(0)} % au-dessus du genou`;
     const dp=$("depthPill");if(R.state!=="setup"){dp.hidden=false;dp.textContent=deep||R.depth?"Profondeur ✓":"Profondeur ✗";dp.className="pill "+(deep||R.depth?"good":"bad")}
     if(R.state==="setup"){if(!stream)R.ref.moved=true;if(!R.ref.moved&&moved("hy",2.5,0.12*thigh,t))R.ref.moved=true;setState(R.ref.moved?"En attente : debout, immobile":"Sors la barre du rack");if(R.ref.moved&&kneeA>160&&still("hy",1.0,0.04*thigh,t)){say("Squat");R.state="ready";R.ref.start=hip.y}}
     else if(R.state==="ready"){setState("Commande donnée, descends");if(hip.y>R.ref.start+0.25*thigh){R.state="down";R.ref.max=hip.y}}
@@ -185,8 +186,10 @@ function draw(lm,info){
   ctx.lineWidth=Math.max(3,W/250);ctx.strokeStyle="#6f95ff";ctx.beginPath();
   [["sh","el"],["el","wr"],["sh","hip"],["hip","kn"],["kn","an"]].forEach(([a,b])=>{ctx.moveTo(g(a).x*W,g(a).y*H);ctx.lineTo(g(b).x*W,g(b).y*H)});ctx.stroke();
   pts.forEach(p=>{ctx.beginPath();ctx.arc(p.x*W,p.y*H,Math.max(5,W/160),0,Math.PI*2);ctx.fillStyle="#fff";ctx.fill()});
-  if($("lift").value==="squat"){const hip=g("hip"),kn=g("kn");const ok=R.depth||hip.y>=kn.y-parseFloat($("depth").value)*dist(hip,kn);
-    ctx.setLineDash([10,8]);ctx.strokeStyle=ok?"#3fbf7a":"#ef6a5f";ctx.beginPath();ctx.moveTo(0,kn.y*H);ctx.lineTo(W,kn.y*H);ctx.stroke();ctx.setLineDash([])}
+  if($("lift").value==="squat"){const hip=g("hip"),kn=g("kn");const th=kn.y-parseFloat($("depth").value)*dist(hip,kn);const ok=R.depth||hip.y>=th;
+    ctx.setLineDash([10,8]);ctx.lineWidth=Math.max(2,W/300);ctx.strokeStyle=ok?"#3fbf7a":"#ef6a5f";ctx.beginPath();ctx.moveTo(0,th*H);ctx.lineTo(W,th*H);ctx.stroke();ctx.setLineDash([]);
+    ctx.beginPath();ctx.arc(hip.x*W,hip.y*H,Math.max(8,W/110),0,Math.PI*2);ctx.lineWidth=Math.max(3,W/250);ctx.strokeStyle=ok?"#3fbf7a":"#ef6a5f";ctx.stroke();
+    ctx.font=`600 ${Math.max(14,W/45)}px system-ui`;ctx.fillStyle=ok?"#3fbf7a":"#ef6a5f";ctx.fillText("Seuil de profondeur",12,th*H-8)}
 }
 
 /* ---------- loop ---------- */
