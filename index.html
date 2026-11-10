@@ -67,6 +67,7 @@ ul{margin:0;padding-left:20px}
   <div class="row">
     <button id="cam">Démarrer la caméra</button>
     <label class="filebtn">Tester sur une vidéo<input type="file" id="file" accept="video/*"></label>
+    <button class="ghost" id="replay" hidden>Rejouer la vidéo</button>
     <button class="ghost" id="reset">Nouvel essai</button>
     <button class="ghost" id="stop" hidden>Arrêter</button>
   </div>
@@ -193,7 +194,7 @@ async function loadPose(){
   try{pose=await PoseLandmarker.createFromOptions(vision,opts("GPU"))}catch(e){pose=await PoseLandmarker.createFromOptions(vision,opts("CPU"))}
   poseKind=kind;
 }
-function stopAll(){running=false;cancelAnimationFrame(raf);if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}vid.pause();try{wake&&wake.release()}catch(e){}wake=null;$("stop").hidden=true;$("cam").disabled=false}
+function stopAll(){running=false;cancelAnimationFrame(raf);if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}vid.pause();clearTimeout(cmdTimer);$("cmd").classList.remove("on");try{speechSynthesis.cancel()}catch(e){}try{wake&&wake.release()}catch(e){}wake=null;$("stop").hidden=true;$("cam").disabled=false}
 async function startCam(){
   unlockAudio();stopAll();resetRep();sm=null;
   try{await loadPose();
@@ -203,12 +204,19 @@ async function startCam(){
     running=true;$("stop").hidden=false;$("cam").disabled=true;loop();
   }catch(e){setState("Caméra ou modèle indisponible","bad");$("hint").textContent="Impossible de démarrer : autorise l'accès à la caméra dans Safari (aA › Réglages du site web › Caméra) et vérifie ta connexion pour le premier chargement du modèle."}
 }
+let fileUrl=null;
 async function startFile(f){
   unlockAudio();stopAll();resetRep();sm=null;
-  try{await loadPose();vid.srcObject=null;vid.src=URL.createObjectURL(f);vid.loop=false;await vid.play();running=true;$("stop").hidden=false;loop()}
+  try{await loadPose();vid.srcObject=null;if(fileUrl)URL.revokeObjectURL(fileUrl);fileUrl=URL.createObjectURL(f);vid.src=fileUrl;vid.loop=false;await vid.play();running=true;$("stop").hidden=false;$("replay").hidden=false;loop()}
   catch(e){setState("Lecture impossible","bad")}
 }
-$("cam").onclick=startCam;
+async function replay(){
+  if(!fileUrl)return;unlockAudio();stopAll();resetRep();sm=null;lastT=-1;
+  try{vid.srcObject=null;if(vid.src!==fileUrl)vid.src=fileUrl;vid.currentTime=0;await vid.play();running=true;$("stop").hidden=false;loop()}catch(e){setState("Lecture impossible","bad")}
+}
+$("replay").onclick=replay;
+vid.addEventListener("ended",()=>{if(!stream){running=false;setState(R.done?$("state").textContent:"Vidéo terminée · « Rejouer la vidéo » pour revoir")}});
+$("cam").onclick=()=>{$("replay").hidden=true;startCam()};
 $("file").addEventListener("change",()=>{const f=$("file").files[0];if(f)startFile(f);$("file").value=""});
 $("stop").onclick=()=>{stopAll();setState("Arrêté")};
 $("reset").onclick=()=>{unlockAudio();resetRep();sm=null};
