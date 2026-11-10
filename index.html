@@ -56,13 +56,13 @@ ul{margin:0;padding-left:20px}
 <div class="wrap">
   <div class="row" style="justify-content:space-between;align-items:flex-end">
     <div><div class="sub">Force athlétique · commandes IPF en direct</div><h1>Arbitre <span>vocal</span></h1></div>
-    <span class="sub"><span id="fps"></span> · version 11</span>
+    <span class="sub"><span id="fps"></span> · version 12</span>
   </div>
 
   <div class="grid">
     <label>Mouvement<select id="lift"><option value="squat">Squat</option><option value="bench">Développé couché</option><option value="deadlift">Soulevé de terre</option></select></label>
     <label>Profondeur exigée<select id="depth"><option value="0">Très stricte</option><option value="0.06">Stricte</option><option value="0.12" selected>Standard</option><option value="0.18">Souple</option><option value="0.24">Très souple</option></select></label>
-    <label>Pause au développé<select id="pause"><option value="0.3">Courte (0,3 s)</option><option value="0.5" selected>Normale (0,5 s)</option><option value="0.8">Longue (0,8 s)</option><option value="1.2">Très longue (1,2 s)</option></select></label>
+    <label>Pause au développé<select id="pause"><option value="0.4">Arbitre rapide (0,4 s)</option><option value="0.6" selected>Arbitre standard (0,6 s)</option><option value="0.9">Arbitre strict (0,9 s)</option><option value="1.3">Très strict (1,3 s)</option></select></label>
     <label>Mesures à l'écran<select id="showDbg"><option value="0">Masquées</option><option value="1">Affichées</option></select></label>
     <label>Précision<select id="model"><option value="lite">Rapide</option><option value="full" selected>Précise</option></select></label>
   </div>
@@ -117,14 +117,15 @@ function ang(a,b,c){const v1=[a.x-b.x,a.y-b.y],v2=[c.x-b.x,c.y-b.y];const d=Math
 const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 let sm=null;
 function smooth(lm){if(!sm){sm=lm.map(p=>({...p}));return sm}const k=0.7;sm=lm.map((p,i)=>({x:sm[i].x+(p.x-sm[i].x)*k,y:sm[i].y+(p.y-sm[i].y)*k,z:p.z,visibility:p.visibility}));return sm}
-const hist=[];let meas="";
+const hist=[];let meas="",armMax=0,bv=null;
 function pushHist(t,o){hist.push({t,...o});while(hist.length&&t-hist[0].t>3)hist.shift()}
 function moved(key,sec,amp,t){const h=hist.filter(x=>t-x.t<=sec);if(h.length<4)return false;const ys=h.map(x=>x[key]);return Math.max(...ys)-Math.min(...ys)>amp}
+function calm(key,sec,t){const h=hist.filter(x=>t-x.t<=sec&&x[key]!=null);if(h.length<5||t-h[0].t<sec*0.8)return false;const n=h.length,mt=h.reduce((a,x)=>a+x.t,0)/n,mv=h.reduce((a,x)=>a+x[key],0)/n;let sxy=0,sxx=0,sr=0;h.forEach(x=>{sxy+=(x.t-mt)*(x[key]-mv);sxx+=(x.t-mt)**2});const b=sxx?sxy/sxx:0;h.forEach(x=>{const r=x[key]-(mv+b*(x.t-mt));sr+=r*r});return Math.abs(b)<0.1&&Math.sqrt(sr/n)<0.03}
 function still(key,sec,tol,t){const h=hist.filter(x=>t-x.t<=sec);if(h.length<4||t-h[0].t<sec*0.8)return false;const ys=h.map(x=>x[key]);return Math.max(...ys)-Math.min(...ys)<tol}
 
 /* ---------- referee state ---------- */
 let R;
-function resetRep(){R={state:"setup",t0:performance.now(),log:[],faults:[],notes:[],depth:false,ref:{},done:false};hist.length=0;$("result").hidden=true;$("log").textContent="Aucune pour l'instant.";$("depthPill").hidden=true}
+function resetRep(){bv=null;R={state:"setup",t0:performance.now(),log:[],faults:[],notes:[],depth:false,ref:{},done:false};hist.length=0;$("result").hidden=true;$("log").textContent="Aucune pour l'instant.";$("depthPill").hidden=true}
 resetRep();
 function setState(txt,cls){const s=$("state");s.textContent=txt;s.className="pill"+(cls?" "+cls:"")}
 function finish(){
@@ -157,20 +158,22 @@ function step(lm,t){
   }else if(lift==="bench"){
     const pause=parseFloat($("pause").value);
     const vis=i=>(lm[i].visibility??1)>0.5;
-    let ex=dist(sh,wr)/arm;if(vis(11)&&vis(12)&&vis(15)&&vis(16)){const a2=Math.max(0.02,dist(lm[12],lm[14])+dist(lm[14],lm[16]));ex=(ex+dist(lm[12],lm[16])/a2)/2}
-    pushHist(t,{hy:hip.y,wy:wr.y,ex});meas=`ext ${ex.toFixed(2)} · coude ${elbA.toFixed(0)}°`;
-    if(R.state==="setup"){setState("En attente : bras tendus, barre immobile");if(ex>0.8)R.ref.top0=Math.max(R.ref.top0||0,ex);
-      if(ex>0.8&&still("ex",0.8,0.05,t)){say("Start");R.state="ready";R.ref.top=ex}
-      else if(!stream&&R.ref.top0&&ex<R.ref.top0-0.15){R.notes.push("Vidéo déjà tournée : descente commencée avant la commande « Start », non pénalisé.");R.state="down";R.ref.top=R.ref.top0;R.ref.bot=ex}}
-    else if(R.state==="ready"){setState("Commande donnée, descends la barre");R.ref.top=Math.max(R.ref.top,ex);if(ex<R.ref.top-0.15){R.state="down";R.ref.bot=ex}}
-    else if(R.state==="down"){setState("Descente : barre immobile sur la poitrine");R.ref.bot=Math.min(R.ref.bot,ex);
-      if(ex<R.ref.top-0.3&&still("ex",pause,0.06,t)){say("Press");R.state="press";R.ref.press=ex;R.ref.max=ex}
-      else if(ex>R.ref.bot+0.15){if(stream)R.faults.push("Poussée avant la commande « Press » : la barre n'est pas restée immobile assez longtemps sur la poitrine.");else R.notes.push("Vidéo déjà tournée : poussée avant la commande « Press », non pénalisée. En compétition, attends la commande.");R.state="press";R.ref.press=R.ref.bot;R.ref.max=ex}}
+    armMax=Math.max(armMax*0.998,arm);
+    let raw=(sh.y-wr.y)/armMax;if(vis(11)&&vis(12)&&vis(15)&&vis(16))raw=((lm[11].y-lm[15].y)+(lm[12].y-lm[16].y))/2/armMax;
+    bv=bv==null?raw:bv+(raw-bv)*0.45;const v=bv;
+    pushHist(t,{hy:hip.y,wy:wr.y,v});meas=`barre ${(v*100).toFixed(0)} % de la longueur de bras au-dessus de l'épaule`;
+    if(R.state==="setup"){setState("En attente : bras tendus, barre immobile");if(v>0.7)R.ref.top0=Math.max(R.ref.top0||0,v);
+      if(v>0.7&&calm("v",0.8,t)){say("Start");R.state="ready";R.ref.top=v}
+      else if(!stream&&R.ref.top0&&v<R.ref.top0-0.15){R.notes.push("Vidéo déjà tournée : descente commencée avant la commande « Start », non pénalisé.");R.state="down";R.ref.top=R.ref.top0;R.ref.bot=v}}
+    else if(R.state==="ready"){setState("Commande donnée, descends la barre");R.ref.top=Math.max(R.ref.top,v);if(v<R.ref.top-0.15){R.state="down";R.ref.bot=v}}
+    else if(R.state==="down"){setState("Descente : barre immobile sur la poitrine");R.ref.bot=Math.min(R.ref.bot,v);
+      if(v<R.ref.top-0.35&&v<R.ref.bot+0.06&&calm("v",pause,t)){say("Press");R.state="press";R.ref.press=v;R.ref.max=v}
+      else if(v>R.ref.bot+0.12){if(stream)R.faults.push("Poussée avant la commande « Press » : la barre n'est pas restée immobile assez longtemps sur la poitrine.");else R.notes.push("Vidéo déjà tournée : poussée avant la commande « Press », non pénalisée. En compétition, attends la commande.");R.state="press";R.ref.press=R.ref.bot;R.ref.max=v}}
     else if(R.state==="press"){setState("Poussée");
-      if(ex<R.ref.press-0.06&&!R.ref.sink){R.ref.sink=true;R.faults.push("La barre s'enfonce ou rebondit après la commande « Press ».")}
-      if(R.ref.max>R.ref.press+0.12&&ex<R.ref.max-0.08&&!R.ref.down){R.ref.down=true;R.faults.push("Mouvement vers le bas pendant la poussée.")}
-      R.ref.max=Math.max(R.ref.max,ex);
-      if(ex>R.ref.top-0.08&&still("ex",0.4,0.05,t)){say("Rack");finish()}}
+      if(v<R.ref.press-0.08&&!R.ref.sink){R.ref.sink=true;R.faults.push("La barre s'enfonce ou rebondit après la commande « Press ».")}
+      if(R.ref.max>R.ref.press+0.12&&v<R.ref.max-0.07&&!R.ref.down){R.ref.down=true;R.faults.push("Mouvement vers le bas pendant la poussée.")}
+      R.ref.max=Math.max(R.ref.max,v);
+      if(v>R.ref.top-0.08&&calm("v",0.4,t)){say("Rack");finish()}}
   }else{
     const L=Math.max(0.04,dist(hip,kn)+dist(kn,an));const h=(an.y-wr.y)/L;
     pushHist(t,{hy:hip.y,wy:wr.y,h});meas=`hauteur ${h.toFixed(2)} · genou ${kneeA.toFixed(0)}° · hanche ${hipA.toFixed(0)}°`;
