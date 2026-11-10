@@ -20,7 +20,7 @@ h1{font-family:var(--display);font-weight:700;font-size:1.9rem;margin:0;text-tra
 h1 span{color:var(--accent)}
 .sub{color:var(--mute);font-size:.88rem;line-height:1.4}
 .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
 @media (max-width:600px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 label{display:flex;flex-direction:column;gap:4px;font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);min-width:0}
 select,button{font:inherit;font-size:1rem;border-radius:8px}
@@ -38,6 +38,7 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--accent);outlin
 .pill{background:rgba(15,20,26,.82);border:1px solid var(--line);border-radius:99px;padding:6px 12px;font-weight:600;font-size:.95rem}
 .cmd{position:absolute;left:0;right:0;bottom:12%;text-align:center;font-family:var(--display);font-weight:700;font-size:4.5rem;letter-spacing:.04em;color:#fff;text-shadow:0 2px 18px rgba(0,0,0,.8);pointer-events:none;opacity:0;transition:opacity .15s}
 .cmd.on{opacity:1}
+.dbg{position:absolute;left:10px;bottom:10px;background:rgba(15,20,26,.82);border:1px solid var(--line);border-radius:8px;padding:4px 10px;font-size:.85rem;font-variant-numeric:tabular-nums;pointer-events:none}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px}
 .lights{display:flex;gap:16px;justify-content:center}
 .light{width:52px;height:52px;border-radius:50%;border:2px solid var(--line);background:#222}
@@ -61,6 +62,7 @@ ul{margin:0;padding-left:20px}
     <label>Mouvement<select id="lift"><option value="squat">Squat</option><option value="bench">Développé couché</option><option value="deadlift">Soulevé de terre</option></select></label>
     <label>Profondeur exigée<select id="depth"><option value="0">Stricte</option><option value="0.05" selected>Standard</option><option value="0.1">Souple</option></select></label>
     <label>Pause au développé<select id="pause"><option value="0.4">Courte (0,4 s)</option><option value="0.7" selected>Normale (0,7 s)</option><option value="1.2">Longue (1,2 s)</option></select></label>
+    <label>Mesures à l'écran<select id="showDbg"><option value="0">Masquées</option><option value="1">Affichées</option></select></label>
     <label>Précision<select id="model"><option value="lite">Rapide</option><option value="full" selected>Précise</option></select></label>
   </div>
 
@@ -77,6 +79,7 @@ ul{margin:0;padding-left:20px}
     <video id="vid" playsinline muted></video>
     <canvas id="cv"></canvas>
     <div class="status"><span class="pill" id="state">Chargement…</span><span class="pill" id="depthPill" hidden>Profondeur</span></div>
+    <div class="dbg" id="dbg" hidden></div>
     <div class="cmd" id="cmd"></div>
   </div>
 
@@ -112,7 +115,7 @@ function ang(a,b,c){const v1=[a.x-b.x,a.y-b.y],v2=[c.x-b.x,c.y-b.y];const d=Math
 const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 let sm=null;
 function smooth(lm){if(!sm){sm=lm.map(p=>({...p}));return sm}const k=0.55;sm=lm.map((p,i)=>({x:sm[i].x+(p.x-sm[i].x)*k,y:sm[i].y+(p.y-sm[i].y)*k,z:p.z,visibility:p.visibility}));return sm}
-const hist=[];
+const hist=[];let dbg="";
 function pushHist(t,o){hist.push({t,...o});while(hist.length&&t-hist[0].t>3)hist.shift()}
 function moved(key,sec,amp,t){const h=hist.filter(x=>t-x.t<=sec);if(h.length<4)return false;const ys=h.map(x=>x[key]);return Math.max(...ys)-Math.min(...ys)>amp}
 function still(key,sec,tol,t){const h=hist.filter(x=>t-x.t<=sec);if(h.length<4||t-h[0].t<sec*0.8)return false;const ys=h.map(x=>x[key]);return Math.max(...ys)-Math.min(...ys)<tol}
@@ -137,29 +140,40 @@ function step(lm,t){
   const s=side(lm),g=k=>lm[P[k][s]];const sh=g("sh"),el=g("el"),wr=g("wr"),hip=g("hip"),kn=g("kn"),an=g("an");
   const thigh=Math.max(0.02,dist(hip,kn)),arm=Math.max(0.02,dist(sh,el)+dist(el,wr));
   const kneeA=ang(hip,kn,an),hipA=ang(sh,hip,kn),elbA=ang(sh,el,wr);
-  pushHist(t,{hy:hip.y,wy:wr.y});
-  const lift=$("lift").value;if(R.done)return {s,kneeA,hipA,elbA};
+  const lift=$("lift").value;if(lift==="squat")pushHist(t,{hy:hip.y,wy:wr.y});dbg=lift==="squat"?`genou ${kneeA.toFixed(0)}°`:dbg;if(R.done)return {s,kneeA,hipA,elbA};
   if(lift==="squat"){
     const tol=parseFloat($("depth").value)*thigh;const deep=hip.y>=kn.y-tol;
     const dp=$("depthPill");if(R.state!=="setup"){dp.hidden=false;dp.textContent=deep||R.depth?"Profondeur ✓":"Profondeur ✗";dp.className="pill "+(deep||R.depth?"good":"bad")}
-    if(R.state==="setup"){if(!R.ref.moved&&moved("hy",2.5,0.12*thigh,t))R.ref.moved=true;setState(R.ref.moved?"En attente : debout, immobile":"Sors la barre du rack");if(R.ref.moved&&kneeA>160&&still("hy",1.0,0.04*thigh,t)){say("Squat");R.state="ready";R.ref.start=hip.y}}
+    if(R.state==="setup"){if(!stream)R.ref.moved=true;if(!R.ref.moved&&moved("hy",2.5,0.12*thigh,t))R.ref.moved=true;setState(R.ref.moved?"En attente : debout, immobile":"Sors la barre du rack");if(R.ref.moved&&kneeA>160&&still("hy",1.0,0.04*thigh,t)){say("Squat");R.state="ready";R.ref.start=hip.y}}
     else if(R.state==="ready"){setState("Commande donnée, descends");if(hip.y>R.ref.start+0.25*thigh){R.state="down";R.ref.max=hip.y}}
     else if(R.state==="down"){setState("Descente");if(deep)R.depth=true;R.ref.max=Math.max(R.ref.max,hip.y);if(hip.y<R.ref.max-0.08*thigh){R.state="up";R.ref.min=hip.y}}
     else if(R.state==="up"){setState("Remontée");if(hip.y>R.ref.min+0.06*thigh&&!R.ref.bounce){R.ref.bounce=true;R.faults.push("Mouvement vers le bas pendant la remontée.")}R.ref.min=Math.min(R.ref.min,hip.y);
       if(kneeA>160&&still("hy",0.5,0.04*thigh,t)){say("Rack");finish()}}
   }else if(lift==="bench"){
     const pause=parseFloat($("pause").value);
-    if(R.state==="setup"){if(!R.ref.moved&&moved("wy",2.5,0.12*arm,t))R.ref.moved=true;setState(R.ref.moved?"En attente : bras tendus, immobile":"Sors la barre des supports");if(R.ref.moved&&elbA>150&&still("wy",1.0,0.03*arm,t)){say("Start");R.state="ready";R.ref.start=wr.y}}
-    else if(R.state==="ready"){setState("Commande donnée, descends la barre");if(wr.y>R.ref.start+0.15*arm){R.state="down"}}
-    else if(R.state==="down"){setState("Descente, barre immobile sur la poitrine");if(wr.y>R.ref.start+0.25*arm&&still("wy",pause,0.02*arm,t)){say("Press");R.state="press";R.ref.press=wr.y;R.ref.min=wr.y}}
-    else if(R.state==="press"){setState("Poussée");if(wr.y>R.ref.press+0.04*arm&&!R.ref.sink){R.ref.sink=true;R.faults.push("La barre s'enfonce ou rebondit après la commande « Press ».")}
-      if(wr.y<R.ref.press-0.1*arm&&wr.y>R.ref.min+0.05*arm&&!R.ref.down){R.ref.down=true;R.faults.push("Mouvement vers le bas pendant la poussée.")}R.ref.min=Math.min(R.ref.min,wr.y);
-      if(elbA>150&&still("wy",0.5,0.03*arm,t)&&wr.y<R.ref.press-0.2*arm){say("Rack");finish()}}
+    const vis=i=>(lm[i].visibility??1)>0.5;
+    let ex=dist(sh,wr)/arm;if(vis(11)&&vis(12)&&vis(15)&&vis(16)){const a2=Math.max(0.02,dist(lm[12],lm[14])+dist(lm[14],lm[16]));ex=(ex+dist(lm[12],lm[16])/a2)/2}
+    pushHist(t,{hy:hip.y,wy:wr.y,ex});dbg=`ext ${ex.toFixed(2)} · coude ${elbA.toFixed(0)}°`;
+    if(R.state==="setup"){setState("En attente : bras tendus, barre immobile");if(ex>0.8&&still("ex",0.8,0.05,t)){say("Start");R.state="ready";R.ref.top=ex}}
+    else if(R.state==="ready"){setState("Commande donnée, descends la barre");R.ref.top=Math.max(R.ref.top,ex);if(ex<R.ref.top-0.15){R.state="down";R.ref.bot=ex}}
+    else if(R.state==="down"){setState("Descente : barre immobile sur la poitrine");R.ref.bot=Math.min(R.ref.bot,ex);
+      if(ex<R.ref.top-0.3&&still("ex",pause,0.05,t)){say("Press");R.state="press";R.ref.press=ex;R.ref.max=ex}
+      else if(ex>R.ref.bot+0.15){R.faults.push("Poussée avant la commande « Press » : la barre n'est pas restée immobile assez longtemps sur la poitrine.");R.state="press";R.ref.press=R.ref.bot;R.ref.max=ex}}
+    else if(R.state==="press"){setState("Poussée");
+      if(ex<R.ref.press-0.06&&!R.ref.sink){R.ref.sink=true;R.faults.push("La barre s'enfonce ou rebondit après la commande « Press ».")}
+      if(R.ref.max>R.ref.press+0.12&&ex<R.ref.max-0.08&&!R.ref.down){R.ref.down=true;R.faults.push("Mouvement vers le bas pendant la poussée.")}
+      R.ref.max=Math.max(R.ref.max,ex);
+      if(ex>R.ref.top-0.08&&still("ex",0.4,0.05,t)){say("Rack");finish()}}
   }else{
-    if(R.state==="setup"){setState("En attente : en position, barre au sol");if(kneeA<150&&still("wy",0.6,0.03*thigh,t)){R.state="ready";R.ref.start=wr.y}}
-    else if(R.state==="ready"){setState("Prêt : tire quand tu veux");if(wr.y<R.ref.start-0.12*thigh){R.state="pull";R.ref.min=wr.y}else if(!still("wy",0.6,0.05*thigh,t)&&kneeA>150){R.state="setup"}}
-    else if(R.state==="pull"){setState("Tirage");if(wr.y>R.ref.min+0.05*thigh&&!R.ref.down){R.ref.down=true;R.faults.push("Mouvement vers le bas pendant la montée.")}R.ref.min=Math.min(R.ref.min,wr.y);
-      if(kneeA>165&&hipA>165&&still("wy",0.5,0.03*thigh,t)){say("Down");finish()}}
+    const L=Math.max(0.04,dist(hip,kn)+dist(kn,an));const h=(an.y-wr.y)/L;
+    pushHist(t,{hy:hip.y,wy:wr.y,h});dbg=`hauteur ${h.toFixed(2)} · genou ${kneeA.toFixed(0)}° · hanche ${hipA.toFixed(0)}°`;
+    const rec=hist.filter(x=>t-x.t<=2&&x.h!=null).map(x=>x.h);const lo=rec.length?Math.min(...rec):h;
+    if(R.state==="setup"){setState("En attente : en position, barre au sol");if(h>lo+0.12&&kneeA<165){R.state="pull";R.ref.max=h;R.ref.start=lo}}
+    else if(R.state==="pull"){setState("Tirage");
+      if(h<R.ref.max-0.06&&!R.ref.down&&R.ref.max>R.ref.start+0.2){R.ref.down=true;R.faults.push("Mouvement vers le bas pendant la montée.")}
+      R.ref.max=Math.max(R.ref.max,h);
+      if(h<R.ref.start+0.05){R.state="setup"}
+      else if(kneeA>158&&hipA>155&&still("h",0.4,0.04,t)){say("Down");finish()}}
   }
   return {s,kneeA,hipA,elbA};
 }
@@ -183,6 +197,7 @@ function loop(){
   const now=performance.now();let res;try{res=pose.detectForVideo(vid,now)}catch(e){return}
   const lm=res&&res.landmarks&&res.landmarks[0];let info={s:0};
   if(lm){const l=smooth(lm);info=step(l,now/1000);draw(l,info)}else{draw(null);if(!R.done)setState("Personne détectée ? Recule ou recadre","warn")}
+  {const d=$("dbg");const on=$("showDbg").value==="1"&&lm;d.hidden=!on;if(on)d.textContent=$("state").textContent+" · "+dbg}
   frames++;if(now-fpsT>1000){$("fps").textContent=frames+" images/s";frames=0;fpsT=now}
 }
 
@@ -220,7 +235,7 @@ $("cam").onclick=()=>{$("replay").hidden=true;startCam()};
 $("file").addEventListener("change",()=>{const f=$("file").files[0];if(f)startFile(f);$("file").value=""});
 $("stop").onclick=()=>{stopAll();setState("Arrêté")};
 $("reset").onclick=()=>{unlockAudio();resetRep();sm=null};
-$("lift").addEventListener("change",()=>{resetRep()});
+$("lift").addEventListener("change",()=>{resetRep();$("depthPill").hidden=true});
 $("model").addEventListener("change",()=>{if(running){const s=!!stream;if(s)startCam()}});
 document.addEventListener("visibilitychange",async()=>{if(!document.hidden&&running&&!wake){try{if(navigator.wakeLock)wake=await navigator.wakeLock.request("screen")}catch(e){}}});
 setState("Prêt");
