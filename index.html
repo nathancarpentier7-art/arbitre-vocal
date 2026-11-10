@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0f141a">
+<title>Arbitre vocal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&display=swap">
+<style>
+:root{--bg:#0f141a;--panel:#171e26;--line:#2a3440;--ink:#e7ecf1;--mute:#93a0ae;--accent:#6f95ff;--good:#3fbf7a;--warn:#e0a63b;--bad:#ef6a5f;
+  --display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;--body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px}
+body{padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left))}
+.wrap{max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+h1{font-family:var(--display);font-weight:700;font-size:1.9rem;margin:0;text-transform:uppercase;letter-spacing:.02em}
+h1 span{color:var(--accent)}
+.sub{color:var(--mute);font-size:.88rem;line-height:1.4}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+@media (max-width:600px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+label{display:flex;flex-direction:column;gap:4px;font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);min-width:0}
+select,button{font:inherit;font-size:1rem;border-radius:8px}
+select{background:var(--panel);color:var(--ink);border:1px solid var(--line);padding:8px 10px;width:100%}
+button{background:var(--accent);color:#fff;border:1px solid var(--accent);padding:10px 16px;font-weight:600;cursor:pointer}
+button.ghost{background:transparent;color:var(--accent)}
+button:disabled{opacity:.5}
+button:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.filebtn{position:relative;display:inline-flex;background:transparent;color:var(--accent);border:1px solid var(--accent);border-radius:8px;padding:10px 16px;font-weight:600;font-size:1rem;text-transform:none;letter-spacing:0;cursor:pointer}
+.filebtn input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.stage{position:relative;width:100%;background:#000;border-radius:10px;overflow:hidden;min-height:200px}
+.stage video,.stage canvas{display:block;width:100%;height:auto}
+.stage canvas{position:absolute;inset:0;height:100%}
+.status{position:absolute;left:10px;top:10px;right:10px;display:flex;justify-content:space-between;gap:8px;pointer-events:none}
+.pill{background:rgba(15,20,26,.82);border:1px solid var(--line);border-radius:99px;padding:6px 12px;font-weight:600;font-size:.95rem}
+.cmd{position:absolute;left:0;right:0;bottom:12%;text-align:center;font-family:var(--display);font-weight:700;font-size:4.5rem;letter-spacing:.04em;color:#fff;text-shadow:0 2px 18px rgba(0,0,0,.8);pointer-events:none;opacity:0;transition:opacity .15s}
+.cmd.on{opacity:1}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.lights{display:flex;gap:16px;justify-content:center}
+.light{width:52px;height:52px;border-radius:50%;border:2px solid var(--line);background:#222}
+.light.w{background:#f4f4f2}.light.r{background:#d63c31}
+.res b{font-family:var(--display);font-size:1.3rem;letter-spacing:.02em}
+.good{color:var(--good)}.bad{color:var(--bad)}.warn{color:var(--warn)}
+ul{margin:0;padding-left:20px}
+.log{font-variant-numeric:tabular-nums;font-size:.9rem;color:var(--mute)}
+[hidden]{display:none!important}
+@media (prefers-reduced-motion:reduce){.cmd{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="row" style="justify-content:space-between;align-items:flex-end">
+    <div><div class="sub">Force athlétique · commandes IPF en direct</div><h1>Arbitre <span>vocal</span></h1></div>
+    <span class="sub" id="fps"></span>
+  </div>
+
+  <div class="grid">
+    <label>Mouvement<select id="lift"><option value="squat">Squat</option><option value="bench">Développé couché</option><option value="deadlift">Soulevé de terre</option></select></label>
+    <label>Profondeur exigée<select id="depth"><option value="0">Stricte</option><option value="0.05" selected>Standard</option><option value="0.1">Souple</option></select></label>
+    <label>Pause au développé<select id="pause"><option value="0.4">Courte (0,4 s)</option><option value="0.7" selected>Normale (0,7 s)</option><option value="1.2">Longue (1,2 s)</option></select></label>
+    <label>Précision<select id="model"><option value="lite">Rapide</option><option value="full" selected>Précise</option></select></label>
+  </div>
+
+  <div class="row">
+    <button id="cam">Démarrer la caméra</button>
+    <label class="filebtn">Tester sur une vidéo<input type="file" id="file" accept="video/*"></label>
+    <button class="ghost" id="reset">Nouvel essai</button>
+    <button class="ghost" id="stop" hidden>Arrêter</button>
+  </div>
+  <div class="sub" id="hint">Pose le téléphone de profil, à hauteur de hanche, à 3 ou 4 m. Tout ton corps doit rester dans le cadre. Le son doit être activé.</div>
+
+  <div class="stage" id="stage" hidden>
+    <video id="vid" playsinline muted></video>
+    <canvas id="cv"></canvas>
+    <div class="status"><span class="pill" id="state">Chargement…</span><span class="pill" id="depthPill" hidden>Profondeur</span></div>
+    <div class="cmd" id="cmd"></div>
+  </div>
+
+  <div class="panel res" id="result" hidden></div>
+  <div class="panel"><div class="sub">Commandes données</div><div class="log" id="log">Aucune pour l'instant.</div></div>
+  <div class="sub">Commandes officielles IPF en anglais. Détection automatique de la posture : c'est une aide à l'entraînement, pas un arbitrage officiel. Les images restent sur ton téléphone.</div>
+</div>
+
+<script type="module">
+import {PoseLandmarker,FilesetResolver} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
+const $=id=>document.getElementById(id);
+const MODELS={lite:"https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",full:"https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task"};
+let vision=null,pose=null,poseKind=null,stream=null,running=false,lastT=-1,raf=0,wake=null,audio=null;
+const vid=$("vid"),cv=$("cv"),ctx=cv.getContext("2d");
+
+/* ---------- audio ---------- */
+function unlockAudio(){try{if(!audio){const AC=window.AudioContext||window.webkitAudioContext;if(AC)audio=new AC()}audio&&audio.resume&&audio.resume()}catch(e){}
+  try{const u=new SpeechSynthesisUtterance(" ");u.volume=0;speechSynthesis.speak(u)}catch(e){}}
+let enVoice=null;function pickVoice(){try{const vs=speechSynthesis.getVoices();enVoice=vs.find(v=>/en-(US|GB)/i.test(v.lang))||null}catch(e){}}
+try{pickVoice();speechSynthesis.onvoiceschanged=pickVoice}catch(e){}
+function beep(f=1000,d=0.12){try{if(!audio)return;const o=audio.createOscillator(),g=audio.createGain();o.frequency.value=f;g.gain.value=0.25;o.connect(g);g.connect(audio.destination);o.start();o.stop(audio.currentTime+d)}catch(e){}}
+let cmdTimer=0;
+function say(word){
+  beep();try{if(speechSynthesis.speaking)speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(word);u.lang="en-US";if(enVoice)u.voice=enVoice;u.rate=1.15;u.pitch=0.9;u.volume=1;speechSynthesis.speak(u)}catch(e){}
+  const c=$("cmd");c.textContent=word.toUpperCase();c.classList.add("on");clearTimeout(cmdTimer);cmdTimer=setTimeout(()=>c.classList.remove("on"),1200);
+  const t=(performance.now()-R.t0)/1000;R.log.push(`${word} · ${t.toFixed(1)} s`);$("log").textContent=R.log.join("   →   ");
+}
+
+/* ---------- geometry ---------- */
+const P={sh:[11,12],el:[13,14],wr:[15,16],hip:[23,24],kn:[25,26],an:[27,28]};
+function side(lm){const v=i=>(lm[i].visibility??1);const l=v(11)+v(23)+v(25)+v(15),r=v(12)+v(24)+v(26)+v(16);return l>=r?0:1}
+function ang(a,b,c){const v1=[a.x-b.x,a.y-b.y],v2=[c.x-b.x,c.y-b.y];const d=Math.hypot(...v1)*Math.hypot(...v2);if(!d)return 0;return Math.acos(Math.max(-1,Math.min(1,(v1[0]*v2[0]+v1[1]*v2[1])/d)))*180/Math.PI}
+const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+let sm=null;
+function smooth(lm){if(!sm){sm=lm.map(p=>({...p}));return sm}const k=0.55;sm=lm.map((p,i)=>({x:sm[i].x+(p.x-sm[i].x)*k,y:sm[i].y+(p.y-sm[i].y)*k,z:p.z,visibility:p.visibility}));return sm}
+const hist=[];
+function pushHist(t,o){hist.push({t,...o});while(hist.length&&t-hist[0].t>3)hist.shift()}
+function moved(key,sec,amp,t){const h=hist.filter(x=>t-x.t<=sec);if(h.length<4)return false;const ys=h.map(x=>x[key]);return Math.max(...ys)-Math.min(...ys)>amp}
+function still(key,sec,tol,t){const h=hist.filter(x=>t-x.t<=sec);if(h.length<4||t-h[0].t<sec*0.8)return false;const ys=h.map(x=>x[key]);return Math.max(...ys)-Math.min(...ys)<tol}
+
+/* ---------- referee state ---------- */
+let R;
+function resetRep(){R={state:"setup",t0:performance.now(),log:[],faults:[],depth:false,ref:{},done:false};hist.length=0;$("result").hidden=true;$("log").textContent="Aucune pour l'instant.";$("depthPill").hidden=true}
+resetRep();
+function setState(txt,cls){const s=$("state");s.textContent=txt;s.className="pill"+(cls?" "+cls:"")}
+function finish(){
+  R.done=true;R.state="done";const lift=$("lift").value;
+  if(lift==="squat"&&!R.depth)R.faults.unshift("Profondeur insuffisante : le pli de la hanche n'est pas passé sous le haut du genou.");
+  const ok=R.faults.length===0;
+  $("result").innerHTML=`<div class="lights">${[0,1,2].map(()=>`<span class="light ${ok?"w":"r"}" role="img" aria-label="${ok?"Lumière blanche":"Lumière rouge"}"></span>`).join("")}</div>
+  <b class="${ok?"good":"bad"}">${ok?"Bon essai":"Essai refusé"}</b>
+  ${ok?`<div class="sub">Aucune faute détectée.</div>`:`<ul>${R.faults.map(f=>`<li>${f}</li>`).join("")}</ul>`}
+  <div class="sub">Appuie sur « Nouvel essai » pour recommencer. La détection se remet en attente toute seule après 6 secondes.</div>`;
+  $("result").hidden=false;setState(ok?"Bon essai":"Essai refusé",ok?"good":"bad");
+  setTimeout(()=>{if(R.done)resetRep()},6000);
+}
+function step(lm,t){
+  const s=side(lm),g=k=>lm[P[k][s]];const sh=g("sh"),el=g("el"),wr=g("wr"),hip=g("hip"),kn=g("kn"),an=g("an");
+  const thigh=Math.max(0.02,dist(hip,kn)),arm=Math.max(0.02,dist(sh,el)+dist(el,wr));
+  const kneeA=ang(hip,kn,an),hipA=ang(sh,hip,kn),elbA=ang(sh,el,wr);
+  pushHist(t,{hy:hip.y,wy:wr.y});
+  const lift=$("lift").value;if(R.done)return {s,kneeA,hipA,elbA};
+  if(lift==="squat"){
+    const tol=parseFloat($("depth").value)*thigh;const deep=hip.y>=kn.y-tol;
+    const dp=$("depthPill");if(R.state!=="setup"){dp.hidden=false;dp.textContent=deep||R.depth?"Profondeur ✓":"Profondeur ✗";dp.className="pill "+(deep||R.depth?"good":"bad")}
+    if(R.state==="setup"){if(!R.ref.moved&&moved("hy",2.5,0.12*thigh,t))R.ref.moved=true;setState(R.ref.moved?"En attente : debout, immobile":"Sors la barre du rack");if(R.ref.moved&&kneeA>160&&still("hy",1.0,0.04*thigh,t)){say("Squat");R.state="ready";R.ref.start=hip.y}}
+    else if(R.state==="ready"){setState("Commande donnée, descends");if(hip.y>R.ref.start+0.25*thigh){R.state="down";R.ref.max=hip.y}}
+    else if(R.state==="down"){setState("Descente");if(deep)R.depth=true;R.ref.max=Math.max(R.ref.max,hip.y);if(hip.y<R.ref.max-0.08*thigh){R.state="up";R.ref.min=hip.y}}
+    else if(R.state==="up"){setState("Remontée");if(hip.y>R.ref.min+0.06*thigh&&!R.ref.bounce){R.ref.bounce=true;R.faults.push("Mouvement vers le bas pendant la remontée.")}R.ref.min=Math.min(R.ref.min,hip.y);
+      if(kneeA>160&&still("hy",0.5,0.04*thigh,t)){say("Rack");finish()}}
+  }else if(lift==="bench"){
+    const pause=parseFloat($("pause").value);
+    if(R.state==="setup"){if(!R.ref.moved&&moved("wy",2.5,0.12*arm,t))R.ref.moved=true;setState(R.ref.moved?"En attente : bras tendus, immobile":"Sors la barre des supports");if(R.ref.moved&&elbA>150&&still("wy",1.0,0.03*arm,t)){say("Start");R.state="ready";R.ref.start=wr.y}}
+    else if(R.state==="ready"){setState("Commande donnée, descends la barre");if(wr.y>R.ref.start+0.15*arm){R.state="down"}}
+    else if(R.state==="down"){setState("Descente, barre immobile sur la poitrine");if(wr.y>R.ref.start+0.25*arm&&still("wy",pause,0.02*arm,t)){say("Press");R.state="press";R.ref.press=wr.y;R.ref.min=wr.y}}
+    else if(R.state==="press"){setState("Poussée");if(wr.y>R.ref.press+0.04*arm&&!R.ref.sink){R.ref.sink=true;R.faults.push("La barre s'enfonce ou rebondit après la commande « Press ».")}
+      if(wr.y<R.ref.press-0.1*arm&&wr.y>R.ref.min+0.05*arm&&!R.ref.down){R.ref.down=true;R.faults.push("Mouvement vers le bas pendant la poussée.")}R.ref.min=Math.min(R.ref.min,wr.y);
+      if(elbA>150&&still("wy",0.5,0.03*arm,t)&&wr.y<R.ref.press-0.2*arm){say("Rack");finish()}}
+  }else{
+    if(R.state==="setup"){setState("En attente : en position, barre au sol");if(kneeA<150&&still("wy",0.6,0.03*thigh,t)){R.state="ready";R.ref.start=wr.y}}
+    else if(R.state==="ready"){setState("Prêt : tire quand tu veux");if(wr.y<R.ref.start-0.12*thigh){R.state="pull";R.ref.min=wr.y}else if(!still("wy",0.6,0.05*thigh,t)&&kneeA>150){R.state="setup"}}
+    else if(R.state==="pull"){setState("Tirage");if(wr.y>R.ref.min+0.05*thigh&&!R.ref.down){R.ref.down=true;R.faults.push("Mouvement vers le bas pendant la montée.")}R.ref.min=Math.min(R.ref.min,wr.y);
+      if(kneeA>165&&hipA>165&&still("wy",0.5,0.03*thigh,t)){say("Down");finish()}}
+  }
+  return {s,kneeA,hipA,elbA};
+}
+
+/* ---------- drawing ---------- */
+function draw(lm,info){
+  cv.width=vid.videoWidth;cv.height=vid.videoHeight;ctx.clearRect(0,0,cv.width,cv.height);if(!lm)return;
+  const W=cv.width,H=cv.height,s=info.s,g=k=>lm[P[k][s]];const pts=["sh","el","wr","hip","kn","an"].map(g);
+  ctx.lineWidth=Math.max(3,W/250);ctx.strokeStyle="#6f95ff";ctx.beginPath();
+  [["sh","el"],["el","wr"],["sh","hip"],["hip","kn"],["kn","an"]].forEach(([a,b])=>{ctx.moveTo(g(a).x*W,g(a).y*H);ctx.lineTo(g(b).x*W,g(b).y*H)});ctx.stroke();
+  pts.forEach(p=>{ctx.beginPath();ctx.arc(p.x*W,p.y*H,Math.max(5,W/160),0,Math.PI*2);ctx.fillStyle="#fff";ctx.fill()});
+  if($("lift").value==="squat"){const hip=g("hip"),kn=g("kn");const ok=R.depth||hip.y>=kn.y-parseFloat($("depth").value)*dist(hip,kn);
+    ctx.setLineDash([10,8]);ctx.strokeStyle=ok?"#3fbf7a":"#ef6a5f";ctx.beginPath();ctx.moveTo(0,kn.y*H);ctx.lineTo(W,kn.y*H);ctx.stroke();ctx.setLineDash([])}
+}
+
+/* ---------- loop ---------- */
+let frames=0,fpsT=performance.now();
+function loop(){
+  if(!running)return;raf=requestAnimationFrame(loop);
+  if(vid.readyState<2||!pose)return;if(vid.currentTime===lastT&&!stream)return;lastT=vid.currentTime;
+  const now=performance.now();let res;try{res=pose.detectForVideo(vid,now)}catch(e){return}
+  const lm=res&&res.landmarks&&res.landmarks[0];let info={s:0};
+  if(lm){const l=smooth(lm);info=step(l,now/1000);draw(l,info)}else{draw(null);if(!R.done)setState("Personne détectée ? Recule ou recadre","warn")}
+  frames++;if(now-fpsT>1000){$("fps").textContent=frames+" images/s";frames=0;fpsT=now}
+}
+
+async function loadPose(){
+  const kind=$("model").value;if(pose&&poseKind===kind)return;
+  setState("Chargement du modèle…");$("stage").hidden=false;
+  if(!vision)vision=await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
+  const opts=d=>({baseOptions:{modelAssetPath:MODELS[kind],delegate:d},runningMode:"VIDEO",numPoses:1,minPoseDetectionConfidence:0.5,minTrackingConfidence:0.5});
+  try{pose=await PoseLandmarker.createFromOptions(vision,opts("GPU"))}catch(e){pose=await PoseLandmarker.createFromOptions(vision,opts("CPU"))}
+  poseKind=kind;
+}
+function stopAll(){running=false;cancelAnimationFrame(raf);if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}vid.pause();try{wake&&wake.release()}catch(e){}wake=null;$("stop").hidden=true;$("cam").disabled=false}
+async function startCam(){
+  unlockAudio();stopAll();resetRep();sm=null;
+  try{await loadPose();
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment",width:{ideal:1280},height:{ideal:720}},audio:false});
+    vid.srcObject=stream;vid.src="";await vid.play();
+    try{if(navigator.wakeLock)wake=await navigator.wakeLock.request("screen")}catch(e){}
+    running=true;$("stop").hidden=false;$("cam").disabled=true;loop();
+  }catch(e){setState("Caméra ou modèle indisponible","bad");$("hint").textContent="Impossible de démarrer : autorise l'accès à la caméra dans Safari (aA › Réglages du site web › Caméra) et vérifie ta connexion pour le premier chargement du modèle."}
+}
+async function startFile(f){
+  unlockAudio();stopAll();resetRep();sm=null;
+  try{await loadPose();vid.srcObject=null;vid.src=URL.createObjectURL(f);vid.loop=false;await vid.play();running=true;$("stop").hidden=false;loop()}
+  catch(e){setState("Lecture impossible","bad")}
+}
+$("cam").onclick=startCam;
+$("file").addEventListener("change",()=>{const f=$("file").files[0];if(f)startFile(f);$("file").value=""});
+$("stop").onclick=()=>{stopAll();setState("Arrêté")};
+$("reset").onclick=()=>{unlockAudio();resetRep();sm=null};
+$("lift").addEventListener("change",()=>{resetRep()});
+$("model").addEventListener("change",()=>{if(running){const s=!!stream;if(s)startCam()}});
+document.addEventListener("visibilitychange",async()=>{if(!document.hidden&&running&&!wake){try{if(navigator.wakeLock)wake=await navigator.wakeLock.request("screen")}catch(e){}}});
+setState("Prêt");
+</script>
+</body>
+</html>
